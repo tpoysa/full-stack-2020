@@ -3,55 +3,13 @@ const supertest = require('supertest')
 const app = require('../app')
 const api = supertest(app)
 const Blog = require('../models/blog')
+const helper = require('./test_data')
 const _ = require('lodash')
-
-const blogs = [
-    {
-        title: 'React patterns',
-        author: 'Michael Chan',
-        url: 'https://reactpatterns.com/',
-        likes: 7,
-    },
-    {
-        title: 'Go To Statement Considered Harmful',
-        author: 'Edsger W. Dijkstra',
-        url: 'http://www.u.arizona.edu/~rubinson/copyright_violations/Go_To_Considered_Harmful.html',
-        likes: 5,
-    },
-    {
-        title: 'Canonical string reduction',
-        author: 'Edsger W. Dijkstra',
-        url: 'http://www.cs.utexas.edu/~EWD/transcriptions/EWD08xx/EWD808.html',
-        likes: 12,
-    },
-    {
-        title: 'First class tests',
-        author: 'Robert C. Martin',
-        url: 'http://blog.cleancoder.com/uncle-bob/2017/05/05/TestDefinitions.htmll',
-        likes: 10,
-    },
-    {
-        title: 'TDD harms architecture',
-        author: 'Robert C. Martin',
-        url: 'http://blog.cleancoder.com/uncle-bob/2017/03/03/TDD-Harms-Architecture.html',
-        likes: 0,
-    },
-    {
-        title: 'Type wars',
-        author: 'Robert C. Martin',
-        url: 'http://blog.cleancoder.com/uncle-bob/2016/05/01/TypeWars.html',
-        likes: 2,
-    }
-]
 
 beforeEach(async () => {
 
     await Blog.deleteMany({})
-
-    for (let blog of blogs) {
-        let blogObject = new Blog(blog)
-        await blogObject.save()
-      }
+    await Blog.insertMany(helper.blogs)
 })
 
 describe('blog api GET tests', () => {
@@ -59,45 +17,96 @@ describe('blog api GET tests', () => {
     test('correct number of blogs returned', async () => {
 
         const response = await api.get('/api/blogs')
-        expect(response.body).toHaveLength(6)
+        expect(response.body).toHaveLength(helper.blogs.length)
 
     })
 
     test('correct id field returned', async () => {
 
         const response = await api.get('/api/blogs')
-        expect(response.body[0].id).toBeDefined()
+        expect(_.first(response.body).id).toBeDefined()
+
     })
 
 })
 
 describe('blog api POST tests', () => {
 
-    blogToAdd = {
-        title: 'Blog 1',
-        author: 'Tester',
-        url: 'www.google.com',
-        likes: 5,
-    }
-
     test('succeeds with valid data', async () => {
 
         await api
             .post('/api/blogs')
-            .send(blogToAdd)
+            .send(helper.blogToAdd)
             .expect(201)
             .expect('Content-Type', /application\/json/)
-        
+
         const totalBlogs = await api.get('/api/blogs')
-        
-        expect(totalBlogs.body).toHaveLength(blogs.length + 1)
-        expect(_.last(totalBlogs.body).title).toBe('Blog 1')
+
+        expect(totalBlogs.body).toHaveLength(helper.blogs.length + 1)
+
+        expect(_.last(totalBlogs.body).title).toBe(helper.blogToAdd.title)
+        expect(_.last(totalBlogs.body).author).toBe(helper.blogToAdd.author)
+        expect(_.last(totalBlogs.body).url).toBe(helper.blogToAdd.url)
+        expect(_.last(totalBlogs.body).likes).toBe(helper.blogToAdd.likes)
+
+    })
+
+    test('if likes is not specified, it is set at 0', async () => {
+
+        const response = await api.post('/api/blogs').send(helper.blogWithoutLikes)
+        expect(response.body.likes).toBe(0)
+
+    })
+
+    test('POST request without title and url returns 400 Bad Request', async () => {
+
+        const response = await api.post('/api/blogs').send(helper.blogWithoutTitleAndUrl)
+        expect(response.statusCode).toBe(400)
     })
 
 })
 
+describe('blog api PUT tests', () => {
 
+    test('succeeds with valid data and id', async () => {
+
+        let blogs = await Blog.find({})
+        let blogToUpdate = _.first(blogs)
+
+        await api
+            .put(`/api/blogs/${blogToUpdate.id}`)
+            .send(helper.blogToPut)
+            .expect(200)
+            .expect('Content-Type', /application\/json/)
+
+        blogs = await Blog.find({})
+        blogToUpdate = _.first(blogs)
+
+        expect(blogToUpdate.title).toBe(helper.blogToPut.title)
+        expect(blogToUpdate.author).toBe(helper.blogToPut.author)
+        expect(blogToUpdate.url).toBe(helper.blogToPut.url)
+        expect(blogToUpdate.likes).toBe(helper.blogToPut.likes)
+    })
+
+})
+
+describe('blog api DELETE tests', () => {
+
+    test('succeeds with a valid id', async () => {
+
+        let blogs = await Blog.find({})
+        let blogToDelete = _.last(blogs)
+
+        await api
+            .delete(`/api/blogs/${blogToDelete.id}`)
+            .send()
+            .expect(204)
+
+        blogs = await Blog.find({})
+        expect(blogs.length).toBe(helper.blogs.length - 1)
+    })
+})
 
 afterAll(() => {
     mongoose.connection.close()
-  })
+})
