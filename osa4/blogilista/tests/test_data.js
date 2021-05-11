@@ -47,12 +47,12 @@ const blogToAdd = {
 const blogWithoutLikes = {
     title: 'Blog 2',
     author: 'Tester 2',
-    url: 'www.google.fi'
+    url: 'www.google.fi',
 }
 
 const blogWithoutTitleAndUrl = {
     author: 'Tester 3',
-    likes: 3
+    likes: 3,
 }
 
 const blogToPut =   {
