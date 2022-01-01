@@ -3,7 +3,7 @@ const blogs = [
         title: 'React patterns',
         author: 'Michael Chan',
         url: 'https://reactpatterns.com/',
-        likes: 7,
+        likes: 7
     },
     {
         title: 'Go To Statement Considered Harmful',

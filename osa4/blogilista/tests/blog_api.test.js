@@ -8,6 +8,16 @@ const _ = require('lodash')
 const bcrypt = require('bcrypt')
 const User = require('../models/user')
 
+const credentials = {
+    username: 'root',
+    password: 'sekret'
+}
+
+const wrongCredentials = {
+    username: 'root',
+    password: 'wrongsekret'
+}
+
 beforeEach(async () => {
 
     await User.deleteMany({})
@@ -15,8 +25,13 @@ beforeEach(async () => {
     const user = new User({ username: 'root', name: 'Mr. Root',  passwordHash: passwordHash })
     await user.save()
 
+    const dbUser = await User.findOne({ username: 'root' })
+
+    //Mark all initial blogs to be created by user 'root'
+    const blogsToAdd = _.map(helper.blogs, blog => _.assign({}, blog, { user: dbUser._id.toString() }))
+
     await Blog.deleteMany({})
-    await Blog.insertMany(helper.blogs)
+    await Blog.insertMany(blogsToAdd)
 })
 
 describe('blog api GET tests', () => {
@@ -39,10 +54,38 @@ describe('blog api GET tests', () => {
 
 describe('blog api POST tests', () => {
 
+
+
+    test('Login succeeds with valid credentials', async () => {
+
+        const response =
+            await api
+                .post('/api/login')
+                .send(credentials)
+                .expect(200)
+
+        expect(response.body.token).toBeDefined()
+    })
+
+    test('Login fails with invalid credentials', async () => {
+
+        const response =
+            await api
+                .post('/api/login')
+                .send(wrongCredentials)
+                .expect(401)
+
+        expect(response.body.token).toBeUndefined()
+    })
+
     test('succeeds with valid data', async () => {
+
+        const tokenResponse = await api.post('/api/login').send(credentials)
+        const token = tokenResponse.body.token
 
         await api
             .post('/api/blogs')
+            .set('Authorization', `bearer ${token}`)
             .send(helper.blogToAdd)
             .expect(201)
             .expect('Content-Type', /application\/json/)
@@ -60,14 +103,26 @@ describe('blog api POST tests', () => {
 
     test('if likes is not specified, it is set at 0', async () => {
 
-        const response = await api.post('/api/blogs').send(helper.blogWithoutLikes)
+        const tokenResponse = await api.post('/api/login').send(credentials)
+        const token = tokenResponse.body.token
+
+        const response = await api
+            .post('/api/blogs')
+            .set('Authorization', `bearer ${token}`)
+            .send(helper.blogWithoutLikes)
         expect(response.body.likes).toBe(0)
 
     })
 
     test('POST request without title and url returns 400 Bad Request', async () => {
 
-        const response = await api.post('/api/blogs').send(helper.blogWithoutTitleAndUrl)
+        const tokenResponse = await api.post('/api/login').send(credentials)
+        const token = tokenResponse.body.token
+
+        const response = await api
+            .post('/api/blogs')
+            .set('Authorization', `bearer ${token}`)
+            .send(helper.blogWithoutTitleAndUrl)
         expect(response.statusCode).toBe(400)
     })
 
@@ -99,13 +154,18 @@ describe('blog api PUT tests', () => {
 
 describe('blog api DELETE tests', () => {
 
+
     test('succeeds with a valid id', async () => {
 
+        const tokenResponse = await api.post('/api/login').send(credentials)
+        const token = tokenResponse.body.token
+
         let blogs = await Blog.find({})
-        let blogToDelete = _.last(blogs)
+        let blogToDelete = _.last(blogs).toJSON()
 
         await api
             .delete(`/api/blogs/${blogToDelete.id}`)
+            .set('Authorization', `bearer ${token}`)
             .send()
             .expect(204)
 
@@ -115,15 +175,6 @@ describe('blog api DELETE tests', () => {
 })
 
 describe('user api tests', () => {
-
-    /*     beforeEach(async () => {
-        await User.deleteMany({})
-
-        const passwordHash = await bcrypt.hash('sekret', 10)
-        const user = new User({ username: 'root', passwordHash: passwordHash })
-
-        await user.save()
-    })*/
 
     test('creation succeeds with a fresh username', async () => {
         const usersAtStart = await User.find({})
